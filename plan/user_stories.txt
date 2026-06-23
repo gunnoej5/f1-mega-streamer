@@ -1,0 +1,32 @@
+User Stories
+
+ID	As a	I want	So that	Acceptance
+
+
+US01	As an F1 fan	to run the application on my Windows or macOS computer	I can use my preferred machine for watching races.	
+	The application installs and runs on Windows 11.
+	The application installs and runs on a modern version of macOS.
+	The application can successfully launch and control both Chrome and Brave browser windows.
+
+
+US02	As an F1 fan	a utility that arranges and controls separate browser windows	I can use the standard, full-featured browser experience I'm familiar with.	
+	The application does not use its own embedded browser panes.
+	The application launches instances of a standard, installed browser (Chrome/Brave).
+	The application provides a control interface separate from the browser windows themselves.
+
+
+US03	As an F1 fan	to select a stream from the F1TV interface and 'pop it out' into a new window	I can easily build my multi-view layout with the specific feeds I want.	
+	While viewing a stream on the F1TV website, I can trigger a 'pop out' action for an alternative feed.
+	The action launches a new browser window with the selected feed.
+	The new window is automatically registered with the utility for synchronized control.
+
+
+US04	As an F1 fan	a master play/pause button and timeline scrubber	I can control all my streams simultaneously to analyze a specific moment.	
+	When I press the master pause button, all video streams pause within 0.5 seconds of each other.
+	When I press the master play button, all video streams resume playback.
+	When I drag the master timeline scrubber, all video streams seek to the selected timestamp.
+	After seeking, the time difference between any two streams is less than 0.5 seconds.
+
+US05	As an F1 fan	a central volume mixer for all my streams	I can easily adjust the audio levels of each feed without hunting for the right window.	
+	The utility's control interface displays a volume slider for each active stream.
+	Adjusting a slider changes the volume of the corresponding stream's browser window.

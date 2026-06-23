@@ -4,4 +4,4 @@ Factory deliverable for run `3b7959b3-2657-41bc-a671-12e8cf0e71d7`, project `785
 
 See `MANIFEST.json` for full metadata.
 
-Source files are under `src/`, ops docs under `ops/`, and code review under `review/`.
+Source files are under `src/`, ops docs under `ops/`, code review under `review/`, and development planning docs under `plan/`.

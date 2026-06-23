@@ -1,0 +1,37 @@
+# F1TV Multi-Stream Sync Application Requirements
+
+## 1. Overview
+
+The goal is to develop a utility application for Windows and macOS that helps Formula 1 fans watch multiple, time-synchronized F1TV streams simultaneously. The application will not be a self-contained browser but will instead launch, arrange, and control separate, standard browser windows (Chrome or Brave).
+
+## 2. Functional Requirements
+
+### 2.1. Platform Support
+- **Operating Systems:** The application must be compatible with Windows 11 and modern versions of macOS.
+- **Web Browsers:** The application must be able to control Google Chrome (primary) and Brave (secondary).
+
+### 2.2. Application Architecture
+- The product shall be a utility that launches and manages standard, separate browser windows.
+- It will not be a monolithic application with embedded web panes.
+
+### 2.3. Stream Management
+- **Stream Launching:** The application must be able to launch up to 6 simultaneous browser windows, each directed to the F1TV service.
+- **Stream Selection:** The user should be able to select a specific stream (e.g., driver onboard, data channel) from the main F1TV interface and have the utility 'pop it out' into a new, managed browser window.
+
+### 2.4. Playback Control
+- **Master Controls:** The application must provide a central user interface with master controls.
+- **Master Play/Pause:** A single play/pause button that simultaneously controls playback across all managed browser windows.
+- **Master Timeline Scrubber:** A single timeline scrubber that, when adjusted, seeks the video position in all managed browser windows to the same timestamp.
+
+### 2.5. Synchronization
+- The primary function is to ensure all video streams are time-synchronized.
+- The maximum acceptable time difference between any two streams must be less than 0.5 seconds.
+
+## 3. Optional Features (Nice to Have)
+
+- **Master Volume Mixer:** A central control panel with individual volume sliders for each managed stream, allowing the user to mix audio levels.
+
+## 4. Assumptions & Constraints
+
+- The user must have a valid and active F1TV subscription.
+- The application's functionality is dependent on the structure and behavior of the F1TV website.

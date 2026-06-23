@@ -1,46 +1,93 @@
+const fs = require('fs');
+const { randomUUID } = require('crypto');
 const puppeteer = require('puppeteer-core');
 const chromeFinder = require('chrome-finder');
+const { buildInjectedSyncClient } = require('../../client/injected-sync-client');
 
 const managedInstances = new Map();
+
+const BRAVE_PATH_CANDIDATES = [
+  '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+  '/usr/bin/brave-browser',
+  '/usr/bin/brave',
+  'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+  'C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+];
+
+function findBrowserExecutable() {
+  if (process.env.BROWSER_EXECUTABLE && fs.existsSync(process.env.BROWSER_EXECUTABLE)) {
+    return process.env.BROWSER_EXECUTABLE;
+  }
+
+  try {
+    return chromeFinder();
+  } catch (error) {
+    const bravePath = BRAVE_PATH_CANDIDATES.find((candidate) => fs.existsSync(candidate));
+    if (bravePath) {
+      return bravePath;
+    }
+
+    throw error;
+  }
+}
+
+async function injectSyncClient(page, websocketUrl) {
+  const injectedScript = buildInjectedSyncClient({ websocketUrl });
+
+  await page.evaluateOnNewDocument((scriptSource) => {
+    (0, eval)(scriptSource);
+  }, injectedScript);
+  await page.evaluate((scriptSource) => {
+    // Use indirect eval so the injected code runs in the page scope.
+    (0, eval)(scriptSource);
+  }, injectedScript);
+}
 
 /**
  * Launches a new browser instance, navigates to a URL, and attaches for automation.
  * @param {object} options
  * @param {string} options.url The URL to navigate to.
+ * @param {string} options.websocketUrl The sync server URL for the injected client.
  * @returns {Promise<{browser: *, page: *, instanceId: string}>} The browser and page objects.
  */
-async function launchStream({ url }) {
+async function launchStream({ url, websocketUrl, x = 50, y = 50, width = 1280, height = 720 }) {
   try {
-    const chromePath = chromeFinder();
-    if (!chromePath) {
-      throw new Error('Google Chrome could not be found.');
+    if (!websocketUrl) {
+      throw new Error('launchStream requires a websocketUrl.');
     }
 
+    const browserPath = findBrowserExecutable();
     const browser = await puppeteer.launch({
-      executablePath: chromePath,
+      executablePath: browserPath,
       headless: false,
-      // Using port 0 tells the browser to find an available port.
-      args: ['--remote-debugging-port=0'],
+      pipe: true,
+      defaultViewport: null,
+      args: [
+        `--window-position=${x},${y}`,
+        `--window-size=${width},${height}`,
+      ],
     });
 
-    const browserWSEndpoint = browser.wsEndpoint();
-    const connectedBrowser = await puppeteer.connect({ browserWSEndpoint });
-
-    const page = await connectedBrowser.newPage();
+    const pages = await browser.pages();
+    const page = pages[0] || await browser.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await injectSyncClient(page, websocketUrl);
 
-    const instanceId = page.target()._targetId;
-    managedInstances.set(instanceId, { browser: connectedBrowser, page });
+    const instanceId = randomUUID();
+    managedInstances.set(instanceId, { browser, page });
 
     console.log(`Successfully launched and attached to stream: ${instanceId}`);
 
     page.on('close', () => {
       console.log(`Page closed for stream: ${instanceId}`);
       managedInstances.delete(instanceId);
-      // Note: This doesn't close the browser automatically. Lifecycle needs management.
     });
 
-    return { browser: connectedBrowser, page, instanceId };
+    browser.on('disconnected', () => {
+      managedInstances.delete(instanceId);
+    });
+
+    return { browser, page, instanceId };
   } catch (error) {
     console.error('Error launching browser stream:', error);
     throw error;
@@ -48,5 +95,16 @@ async function launchStream({ url }) {
 }
 
 module.exports = {
+  closeAll: async () => {
+    await Promise.all(Array.from(managedInstances.values()).map(async ({ browser }) => {
+      try {
+        await browser.close();
+      } catch (error) {
+        console.warn('Failed to close managed browser:', error.message);
+      }
+    }));
+    managedInstances.clear();
+  },
+  getManagedInstances: () => managedInstances,
   launchStream,
 };

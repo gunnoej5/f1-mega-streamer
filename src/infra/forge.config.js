@@ -1,3 +1,5 @@
+const path = require('path');
+
 module.exports = {
   packagerConfig: {
     asar: true,
@@ -15,6 +17,12 @@ module.exports = {
       config: {
         mainConfig: {
           entry: './src/main.js',
+          resolve: {
+            modules: [
+              path.resolve(__dirname, 'node_modules'),
+              'node_modules',
+            ],
+          },
         },
         renderer: {
           config: {
@@ -38,6 +46,10 @@ module.exports = {
             },
             resolve: {
               extensions: ['.js', '.jsx', '.json'],
+              modules: [
+                path.resolve(__dirname, 'node_modules'),
+                'node_modules',
+              ],
             },
           },
           entryPoints: [

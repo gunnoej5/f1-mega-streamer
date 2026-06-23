@@ -2,68 +2,71 @@ import React, { useState, useEffect } from 'react';
 import TimelineScrubber from './components/TimelineScrubber';
 import StreamControls from './components/StreamControls';
 
+const DEFAULT_STREAM_URL = 'https://f1tv.formula1.com/';
+
 function App() {
-  // T10 State
   const [playbackState, setPlaybackState] = useState({
     currentTime: 0,
     duration: 0,
     isPaused: true,
   });
-
-  // T13 State
-  const [streams, setStreams] = useState([]); // e.g., [{ id: 'client1', volume: 1.0 }]
+  const [streams, setStreams] = useState([]);
 
   useEffect(() => {
-    // This listener handles master playback state (time, duration)
-    const handlePlaybackStateUpdate = (event, state) => {
+    let isMounted = true;
+
+    const handlePlaybackStateUpdate = (state) => {
       setPlaybackState({
-        currentTime: state.currentTime,
-        duration: state.duration,
-        isPaused: state.isPaused,
+        currentTime: typeof state.currentTime === 'number' ? state.currentTime : 0,
+        duration: typeof state.duration === 'number' ? state.duration : 0,
+        isPaused: typeof state.isPaused === 'boolean' ? state.isPaused : true,
       });
     };
 
-    // This listener handles the list of individual streams and their states
-    const handleStreamsStateUpdate = (event, streamsState) => {
-      setStreams(streamsState); // Expects an array of stream objects
+    const handleStreamsStateUpdate = (streamsState) => {
+      setStreams(Array.isArray(streamsState) ? streamsState : []);
     };
 
-    // Assumes a 'window.electron' object exposed by preload.js
-    window.electron.on('playback-state-update', handlePlaybackStateUpdate);
-    window.electron.on('streams-state-update', handleStreamsStateUpdate);
+    const unsubscribePlayback = window.electronAPI.on('playback-state-update', handlePlaybackStateUpdate);
+    const unsubscribeStreams = window.electronAPI.on('streams-state-update', handleStreamsStateUpdate);
 
-    // Request initial state on mount
-    window.electron.send('get-initial-state');
+    window.electronAPI.invoke('get-initial-state').then((initialState) => {
+      if (!isMounted || !initialState) {
+        return;
+      }
+
+      handlePlaybackStateUpdate(initialState.playbackState || {});
+      handleStreamsStateUpdate(initialState.streams || []);
+    }).catch((error) => {
+      console.error('Failed to fetch initial state:', error);
+    });
 
     return () => {
-      window.electron.removeListener('playback-state-update', handlePlaybackStateUpdate);
-      window.electron.removeListener('streams-state-update', handleStreamsStateUpdate);
+      isMounted = false;
+      unsubscribePlayback();
+      unsubscribeStreams();
     };
   }, []);
 
-  // T10 Handler
   const handleSeek = (newTime) => {
-    window.electron.send('seek-all', newTime);
+    window.electronAPI.invoke('seek-all', newTime);
   };
   
   const handlePlayPause = () => {
     if (playbackState.isPaused) {
-      window.electron.send('play-all');
+      window.electronAPI.invoke('play-all');
     } else {
-      window.electron.send('pause-all');
+      window.electronAPI.invoke('pause-all');
     }
   };
 
-  // T13 Handler
   const handleVolumeChange = (streamId, newVolume) => {
-    // Send volume change command to the main process for a specific client
-    window.electron.send('set-stream-volume', { streamId, volume: newVolume });
+    window.electronAPI.invoke('set-stream-volume', { streamId, volume: newVolume });
   };
 
   const handleAddStream = () => {
-    // Example of how a new stream might be added
-    window.electron.send('add-stream', 'https://www.f1.com/en/latest/video.some-race-replay.html');
-  }
+    window.electronAPI.invoke('add-stream', DEFAULT_STREAM_URL);
+  };
 
   return (
     <div className="App">

@@ -1,128 +1,174 @@
-(function() {
-    console.log('[F1TV-Sync] Injected client script running.');
+function buildInjectedSyncClient({ websocketUrl }) {
+    const config = JSON.stringify({ websocketUrl });
 
-    const WEBSOCKET_URL = 'ws://localhost:8080'; // This port must match the server in the Electron app
-    const VIDEO_SELECTOR = 'video.vjs-tech'; // A common selector for video.js players
-    const RETRY_INTERVAL_MS = 500;
-    const TIME_REPORT_INTERVAL_MS = 250;
+    return `(() => {
+        const CONFIG = ${config};
+        const VIDEO_SELECTOR = 'video, video.vjs-tech';
+        const RETRY_INTERVAL_MS = 500;
+        const RECONNECT_INTERVAL_MS = 2000;
+        const STATUS_REPORT_INTERVAL_MS = 500;
 
-    let videoElement = null;
-    let ws = null;
-    let reportingInterval = null;
-
-    /**
-     * T05: Find the main video element on the page, with retries.
-     */
-    function findVideoElement() {
-        console.log('[F1TV-Sync] Searching for video element...');
-        videoElement = document.querySelector(VIDEO_SELECTOR);
-
-        if (videoElement) {
-            console.log('[F1TV-Sync] Video element found:', videoElement);
-            connectWebSocket();
-        } else {
-            console.log(`[F1TV-Sync] Video element not found. Retrying in ${RETRY_INTERVAL_MS}ms.`);
-            setTimeout(findVideoElement, RETRY_INTERVAL_MS);
-        }
-    }
-
-    /**
-     * T05: Connect to the WebSocket server, with reconnection logic.
-     */
-    function connectWebSocket() {
-        console.log(`[F1TV-Sync] Connecting to WebSocket server at ${WEBSOCKET_URL}...`);
-        ws = new WebSocket(WEBSOCKET_URL);
-
-        ws.onopen = () => {
-            console.log('[F1TV-Sync] WebSocket connection established.');
-            startReporting();
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const message = JSON.parse(event.data);
-                handleCommand(message);
-            } catch (error) {
-                console.error('[F1TV-Sync] Error parsing incoming message:', error);
-            }
-        };
-
-        ws.onclose = () => {
-            console.log('[F1TV-Sync] WebSocket connection closed. Attempting to reconnect...');
-            stopReporting();
-            setTimeout(connectWebSocket, 2000); // Reconnect after 2 seconds
-        };
-
-        ws.onerror = (error) => {
-            console.error('[F1TV-Sync] WebSocket error:', error);
-            // onclose will be called next, which handles reconnection.
-        };
-    }
-
-    /**
-     * T06: Handle playback commands from the server.
-     */
-    function handleCommand(message) {
-        if (!videoElement) {
-            console.warn('[F1TV-Sync] Received command but video element is not available.');
+        if (window.__F1TV_SYNC_CLIENT_INSTALLED__) {
             return;
         }
 
-        console.log('[F1TV-Sync] Received command:', message);
+        Object.defineProperty(window, '__F1TV_SYNC_CLIENT_INSTALLED__', {
+            value: true,
+            configurable: false,
+            enumerable: false,
+            writable: false,
+        });
 
-        switch (message.type) {
-            case 'PLAY':
-                videoElement.play();
-                break;
-            case 'PAUSE':
-                videoElement.pause();
-                break;
-            case 'SEEK':
-                if (message.payload && typeof message.payload.time === 'number') {
-                    videoElement.currentTime = message.payload.time;
-                }
-                break;
-            case 'SET_VOLUME':
-                 if (message.payload && typeof message.payload.volume === 'number') {
-                    videoElement.volume = message.payload.volume;
-                }
-                break;
-            default:
-                console.warn('[F1TV-Sync] Unknown command type:', message.type);
-        }
-    }
+        let videoElement = null;
+        let ws = null;
+        let reportingInterval = null;
+        let reconnectTimer = null;
+        let videoRetryTimer = null;
 
-    /**
-     * T07: Periodically report video status back to the server.
-     */
-    function startReporting() {
-        if (reportingInterval) {
-            clearInterval(reportingInterval);
+        function getVideoElement() {
+            return document.querySelector(VIDEO_SELECTOR);
         }
-        reportingInterval = setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN && videoElement) {
-                const message = {
+
+        function scheduleVideoRetry() {
+            if (videoRetryTimer) {
+                return;
+            }
+
+            videoRetryTimer = setTimeout(() => {
+                videoRetryTimer = null;
+                findVideoElement();
+            }, RETRY_INTERVAL_MS);
+        }
+
+        function findVideoElement() {
+            videoElement = getVideoElement();
+
+            if (!videoElement) {
+                scheduleVideoRetry();
+                return;
+            }
+
+            connectWebSocket();
+            startReporting();
+        }
+
+        function scheduleReconnect() {
+            if (reconnectTimer) {
+                return;
+            }
+
+            reconnectTimer = setTimeout(() => {
+                reconnectTimer = null;
+                connectWebSocket();
+            }, RECONNECT_INTERVAL_MS);
+        }
+
+        function connectWebSocket() {
+            if (!videoElement) {
+                findVideoElement();
+                return;
+            }
+
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+
+            ws = new WebSocket(CONFIG.websocketUrl);
+
+            ws.onopen = () => {
+                startReporting();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    handleCommand(JSON.parse(event.data));
+                } catch (error) {
+                    console.error('[F1TV-Sync] Failed to process command:', error);
+                }
+            };
+
+            ws.onclose = () => {
+                stopReporting();
+                scheduleReconnect();
+            };
+
+            ws.onerror = () => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                }
+            };
+        }
+
+        function handleCommand(message) {
+            if (!videoElement) {
+                return;
+            }
+
+            switch (message.type) {
+                case 'PLAY': {
+                    const playPromise = videoElement.play();
+                    if (playPromise && typeof playPromise.catch === 'function') {
+                        playPromise.catch(() => {});
+                    }
+                    break;
+                }
+                case 'PAUSE':
+                    videoElement.pause();
+                    break;
+                case 'SEEK':
+                    if (message.payload && typeof message.payload.time === 'number') {
+                        videoElement.currentTime = message.payload.time;
+                    }
+                    break;
+                case 'SET_VOLUME':
+                    if (message.payload && typeof message.payload.volume === 'number') {
+                        videoElement.volume = message.payload.volume;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        function startReporting() {
+            if (!videoElement) {
+                return;
+            }
+
+            if (reportingInterval) {
+                clearInterval(reportingInterval);
+            }
+
+            reportingInterval = setInterval(() => {
+                if (!videoElement) {
+                    videoElement = getVideoElement();
+                }
+
+                if (!videoElement || !ws || ws.readyState !== WebSocket.OPEN) {
+                    return;
+                }
+
+                ws.send(JSON.stringify({
                     type: 'STATUS_UPDATE',
                     payload: {
                         currentTime: videoElement.currentTime,
                         duration: videoElement.duration,
                         isPaused: videoElement.paused,
                         volume: videoElement.volume,
-                    }
-                };
-                ws.send(JSON.stringify(message));
-            }
-        }, TIME_REPORT_INTERVAL_MS);
-    }
-
-    function stopReporting() {
-        if (reportingInterval) {
-            clearInterval(reportingInterval);
-            reportingInterval = null;
+                    },
+                }));
+            }, STATUS_REPORT_INTERVAL_MS);
         }
-    }
 
-    // Start the process
-    findVideoElement();
+        function stopReporting() {
+            if (reportingInterval) {
+                clearInterval(reportingInterval);
+                reportingInterval = null;
+            }
+        }
 
-})();
+        findVideoElement();
+    })();`;
+}
+
+module.exports = { buildInjectedSyncClient };

@@ -1,14 +1,17 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
-const path = require('path');
+const { app, BrowserWindow, screen } = require('electron');
+const orchestrator = require('../../backend/src/main/core/browser-orchestrator');
+const syncServer = require('../../backend/src/main/core/sync-server');
+const { registerIpcHandlers } = require('../../backend/src/main/core/ipc-handlers');
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+let mainWindow;
+
 const createWindow = () => {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
@@ -18,32 +21,26 @@ const createWindow = () => {
     },
   });
 
-  // and load the index.html of the app.
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
-
-  // IPC Example: Handle message from renderer and respond
-  ipcMain.handle('ipc-example', async (event, arg) => {
-    console.log('Main process received:', arg);
-    return `Main process received your message: \"${arg}\"`;
-  });
-
-  // IPC Example: Send a message to the renderer process
-  mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.send('from-main', '👋 Hello from the Main process!');
-  });
+  return mainWindow;
 };
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', async () => {
+  await syncServer.startServer({ port: 0, host: '127.0.0.1' });
+  const window = createWindow();
+  registerIpcHandlers({
+    orchestrator,
+    syncServer,
+    screen,
+    getMainWindow: () => mainWindow,
+    defaultStreamUrl: 'https://f1tv.formula1.com/',
+  });
+});
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
@@ -51,9 +48,22 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    const window = createWindow();
+    window.webContents.on('did-finish-load', () => {
+      window.webContents.send('playback-state-update', syncServer.getPlaybackState());
+      window.webContents.send('streams-state-update', syncServer.getClientStates().map((stream) => ({
+        id: stream.id,
+        volume: stream.volume,
+        currentTime: stream.currentTime,
+        duration: stream.duration,
+        isPaused: stream.isPaused,
+      })));
+    });
   }
+});
+
+app.on('before-quit', async () => {
+  await orchestrator.closeAll();
+  await syncServer.stopServer();
 });

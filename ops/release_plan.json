@@ -1,0 +1,147 @@
+{
+  "strategy": "recreate",
+  "strategy_rationale": "The project is a self-contained desktop application distributed to end-users. Unlike web services, there is no live server environment where traffic can be gradually shifted. The standard update process for such applications involves replacing the entire existing installation with the new version. The 'recreate' strategy accurately models this 'stop, replace, start' lifecycle, where the user's old application instance is terminated and a completely new one is installed and launched.",
+  "steps": [
+    {
+      "id": "build_frontend_assets",
+      "kind": "build",
+      "title": "Build Frontend Assets",
+      "description": "Compile and bundle the React-based 'Control Panel UI' and the 'Injected Sync Client' JavaScript. This step transpiles TypeScript/JSX, bundles modules, and minifies assets for production.",
+      "slice": "frontend",
+      "components": [
+        "Control Panel UI",
+        "Injected Sync Client"
+      ],
+      "task_ids": [
+        "T05",
+        "T06",
+        "T07",
+        "T10",
+        "T13"
+      ],
+      "depends_on": [],
+      "rollback": "not_applicable",
+      "rollback_notes": null,
+      "addresses_findings": []
+    },
+    {
+      "id": "build_backend_core",
+      "kind": "build",
+      "title": "Build Backend Core",
+      "description": "Compile the Electron main process source code. This includes the 'Application Core', 'Browser Orchestrator', and the 'Sync WebSocket Server' logic.",
+      "slice": "backend",
+      "components": [
+        "Application Core",
+        "Browser Orchestrator",
+        "Sync WebSocket Server"
+      ],
+      "task_ids": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T08",
+        "T09",
+        "T11",
+        "T12",
+        "T14",
+        "T15"
+      ],
+      "depends_on": [],
+      "rollback": "not_applicable",
+      "rollback_notes": null,
+      "addresses_findings": []
+    },
+    {
+      "id": "package_application",
+      "kind": "build",
+      "title": "Package Application Installers",
+      "description": "Combine the built frontend and backend assets using a tool like `electron-builder` to create distributable application packages (e.g., .dmg for macOS, .exe for Windows, .AppImage for Linux).",
+      "slice": "infra",
+      "components": [
+        "Application Core",
+        "Control Panel UI",
+        "Injected Sync Client"
+      ],
+      "task_ids": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T08",
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14",
+        "T15"
+      ],
+      "depends_on": [
+        "build_frontend_assets",
+        "build_backend_core"
+      ],
+      "rollback": "not_applicable",
+      "rollback_notes": null,
+      "addresses_findings": []
+    },
+    {
+      "id": "smoke_test_installers",
+      "kind": "smoke_test",
+      "title": "Smoke Test Packaged Installers",
+      "description": "Perform a basic installation and launch test on each generated application package (macOS, Windows, Linux) to ensure the installer works and the application starts without crashing.",
+      "slice": null,
+      "components": [
+        "Application Core",
+        "Control Panel UI"
+      ],
+      "task_ids": [],
+      "depends_on": [
+        "package_application"
+      ],
+      "rollback": "not_applicable",
+      "rollback_notes": null,
+      "addresses_findings": []
+    },
+    {
+      "id": "publish_release_artifacts",
+      "kind": "deploy",
+      "title": "Publish Release Artifacts",
+      "description": "Upload the signed and verified application packages to the designated public release location (e.g., GitHub Releases). This makes the new version available for download by end-users.",
+      "slice": null,
+      "components": [],
+      "task_ids": [],
+      "depends_on": [
+        "smoke_test_installers"
+      ],
+      "rollback": "manual_runbook",
+      "rollback_notes": "If a critical post-release issue is found, follow the 'Emergency Release Retraction' runbook. This involves: 1. Deleting the release from the public repository (e.g., GitHub Releases). 2. Communicating the retraction on project channels. 3. Re-publishing the last known good version if necessary.",
+      "addresses_findings": []
+    }
+  ],
+  "feature_flags": [],
+  "post_deploy_checks": [
+    {
+      "id": "check_artifact_availability",
+      "kind": "health_probe",
+      "title": "Verify Public Artifact Availability",
+      "description": "Check that the download URLs for the published installers (macOS, Windows, Linux) on the release page are accessible and return a 200 OK status.",
+      "target": "Public release page (e.g., GitHub Releases)",
+      "slo_id": null,
+      "on_failure": "manual_runbook"
+    },
+    {
+      "id": "check_public_install",
+      "kind": "smoke",
+      "title": "Manual Install from Public Source",
+      "description": "Manually download one of the published installers (e.g., the Windows .exe) from the public release page, install it on a clean machine, and verify that the application launches successfully.",
+      "target": "Clean test environment (VM or physical machine)",
+      "slo_id": null,
+      "on_failure": "manual_runbook"
+    }
+  ],
+  "blockers": []
+}

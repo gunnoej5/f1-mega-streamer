@@ -1,0 +1,456 @@
+{
+  "alerts": [
+    {
+      "id": "release_artifact_unavailable",
+      "title": "Release Artifact Is Unavailable for Download",
+      "description": "The HTTP probe checking the public download URL for a release artifact (e.g., .dmg, .exe) is failing. This means users cannot download the latest version of the application.",
+      "severity": "critical",
+      "probe_kind": "http",
+      "condition": "avg(5m): http_probe.status_code != 200",
+      "component": null,
+      "slice": "infra",
+      "slo_id": null,
+      "routes": [
+        {
+          "channel": "pagerduty",
+          "target": "f1-sync-primary-rotation",
+          "escalation_tier": 1
+        },
+        {
+          "channel": "slack",
+          "target": "#f1-sync-alerts",
+          "escalation_tier": 1
+        }
+      ],
+      "runbook_id": "rb-release-artifact",
+      "addresses_findings": []
+    },
+    {
+      "id": "synthetic_app_launch_failure",
+      "title": "Synthetic Application Launch Test Failed",
+      "description": "A synthetic test that installs and launches the packaged application on a clean VM has failed. This indicates a fundamental problem with the application package or its startup sequence.",
+      "severity": "paging",
+      "probe_kind": "synthetic",
+      "condition": "avg(5m): synthetic_test.result_code != 'success'",
+      "component": "Application Core",
+      "slice": "backend",
+      "slo_id": null,
+      "routes": [
+        {
+          "channel": "pagerduty",
+          "target": "f1-sync-primary-rotation",
+          "escalation_tier": 1
+        },
+        {
+          "channel": "slack",
+          "target": "#f1-sync-alerts",
+          "escalation_tier": 1
+        }
+      ],
+      "runbook_id": "rb-app-launch",
+      "addresses_findings": []
+    },
+    {
+      "id": "websocket_server_unresponsive",
+      "title": "Sync WebSocket Server is Unresponsive",
+      "description": "A synthetic test failed to establish a connection with the internal Sync WebSocket Server after application launch. This breaks all communication between the core and the browser clients.",
+      "severity": "critical",
+      "probe_kind": "synthetic",
+      "condition": "avg(5m): synthetic_test.websocket_connect.success == 0",
+      "component": "Sync WebSocket Server",
+      "slice": "backend",
+      "slo_id": null,
+      "routes": [
+        {
+          "channel": "pagerduty",
+          "target": "f1-sync-primary-rotation",
+          "escalation_tier": 1
+        },
+        {
+          "channel": "slack",
+          "target": "#f1-sync-alerts",
+          "escalation_tier": 1
+        }
+      ],
+      "runbook_id": "rb-websocket-conn",
+      "addresses_findings": []
+    },
+    {
+      "id": "browser_orchestration_failure",
+      "title": "Browser Orchestration Failure Detected",
+      "description": "The application logs show a high rate of errors related to launching or controlling a browser instance via the Chrome DevTools Protocol (CDP). This prevents new streams from being opened.",
+      "severity": "critical",
+      "probe_kind": "log_match",
+      "condition": "count(5m): log.message contains 'Failed to connect to browser via CDP' > 5",
+      "component": "Browser Orchestrator",
+      "slice": "backend",
+      "slo_id": null,
+      "routes": [
+        {
+          "channel": "pagerduty",
+          "target": "f1-sync-primary-rotation",
+          "escalation_tier": 1
+        },
+        {
+          "channel": "slack",
+          "target": "#f1-sync-alerts",
+          "escalation_tier": 1
+        }
+      ],
+      "runbook_id": "rb-browser-orchestration",
+      "addresses_findings": []
+    },
+    {
+      "id": "client_error_rate_high",
+      "title": "High Rate of Client-Side Errors",
+      "description": "The rate of non-fatal errors reported from the Injected Sync Client or Control Panel UI has exceeded the acceptable threshold. This may indicate a bug in a recent change or an issue with a specific F1TV site update.",
+      "severity": "warning",
+      "probe_kind": "metric_threshold",
+      "condition": "avg(15m): rate(client.errors.count) > 0.05",
+      "component": "Application Core",
+      "slice": "backend",
+      "slo_id": null,
+      "routes": [
+        {
+          "channel": "slack",
+          "target": "#f1-sync-warnings",
+          "escalation_tier": 1
+        }
+      ],
+      "runbook_id": "rb-runtime-errors",
+      "addresses_findings": []
+    },
+    {
+      "id": "excessive_stream_sync_drift",
+      "title": "Excessive Stream Sync Drift",
+      "description": "The maximum time difference between synchronized streams has exceeded the acceptable tolerance (1000ms). This degrades the core user experience.",
+      "severity": "warning",
+      "probe_kind": "metric_threshold",
+      "condition": "max(10m): stream.sync_drift_ms > 1000",
+      "component": "Application Core",
+      "slice": "backend",
+      "slo_id": null,
+      "routes": [
+        {
+          "channel": "slack",
+          "target": "#f1-sync-warnings",
+          "escalation_tier": 1
+        }
+      ],
+      "runbook_id": "rb-runtime-errors",
+      "addresses_findings": []
+    },
+    {
+      "id": "control_panel_ui_load_failure",
+      "title": "Control Panel UI Failed to Load",
+      "description": "A synthetic test that launches the application detected that the main Control Panel UI did not render correctly or key interactive elements are missing.",
+      "severity": "critical",
+      "probe_kind": "synthetic",
+      "condition": "avg(5m): synthetic_test.element_visible('#master-play-button') == 0",
+      "component": "Control Panel UI",
+      "slice": "frontend",
+      "slo_id": null,
+      "routes": [
+        {
+          "channel": "pagerduty",
+          "target": "f1-sync-primary-rotation",
+          "escalation_tier": 1
+        },
+        {
+          "channel": "slack",
+          "target": "#f1-sync-alerts",
+          "escalation_tier": 1
+        }
+      ],
+      "runbook_id": "rb-ui-load",
+      "addresses_findings": []
+    }
+  ],
+  "runbooks": [
+    {
+      "id": "rb-release-artifact",
+      "title": "Runbook: Investigate Unavailable Release Artifact",
+      "description": "Steps to diagnose and resolve failures in accessing published application installers.",
+      "trigger_alert_ids": [
+        "release_artifact_unavailable"
+      ],
+      "components": [],
+      "steps": [
+        {
+          "kind": "inspect",
+          "title": "Verify Alert",
+          "description": "Manually attempt to access the failing URL from the alert using a browser and `curl`. Confirm if the issue is persistent and not a transient network blip.",
+          "expected_outcome": "Confirmed that the URL returns a non-200 status code (e.g., 404 Not Found)."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Check Release Publication Job",
+          "description": "Inspect the logs of the `publish_release_artifacts` job in the CI/CD pipeline (e.g., GitHub Actions). Look for any errors during the upload or release creation phase.",
+          "expected_outcome": "Identified an error in the CI/CD logs, such as authentication failure, network error, or incorrect path."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Inspect Release Page",
+          "description": "Go to the public release page (e.g., GitHub Releases). Check if the release was created but the assets are missing, or if the entire release is absent.",
+          "expected_outcome": "Confirmed the state of the release on the public platform."
+        },
+        {
+          "kind": "mitigate",
+          "title": "Re-run Publication Job",
+          "description": "If the failure appears transient or was caused by a fixable configuration issue, trigger the `publish_release_artifacts` job again.",
+          "expected_outcome": "The job succeeds and the artifacts become available at the public URL."
+        },
+        {
+          "kind": "rollback",
+          "title": "Emergency Release Retraction",
+          "description": "If the release is broken and cannot be fixed quickly, execute the 'Emergency Release Retraction' procedure. This involves deleting the release from the public repository to prevent further downloads.",
+          "expected_outcome": "The broken release is no longer visible to the public."
+        }
+      ],
+      "addresses_findings": []
+    },
+    {
+      "id": "rb-app-launch",
+      "title": "Runbook: Investigate Synthetic App Launch Failure",
+      "description": "Steps to diagnose why the application is failing to launch in a clean test environment.",
+      "trigger_alert_ids": [
+        "synthetic_app_launch_failure"
+      ],
+      "components": [
+        "Application Core"
+      ],
+      "steps": [
+        {
+          "kind": "inspect",
+          "title": "Review Synthetic Test Logs",
+          "description": "Examine the detailed logs and artifacts (screenshots, videos) from the failed synthetic test run. Look for specific error messages at the OS level or from the application's stdout/stderr.",
+          "expected_outcome": "An error message indicating the point of failure is identified (e.g., 'GDI+ not found', 'segmentation fault')."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Check for Missing Dependencies",
+          "description": "The error may be due to a missing shared library or runtime dependency in the test environment that was not correctly bundled with the application. Compare the build environment with the test environment.",
+          "expected_outcome": "A missing dependency is identified."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Inspect Application Packaging",
+          "description": "Review the configuration for the packaging tool (e.g., `electron-builder`). Ensure all necessary assets (JS bundles, native modules, etc.) are included in the final package.",
+          "expected_outcome": "A misconfiguration in the packaging process is found."
+        },
+        {
+          "kind": "escalate",
+          "title": "Escalate to Development Team",
+          "description": "If the cause is not an obvious packaging or environment issue, this could be a code-level bug in the application's startup path. Escalate to the development team with all collected logs and findings.",
+          "expected_outcome": "A ticket is created with detailed diagnostic information for the development team."
+        }
+      ],
+      "addresses_findings": []
+    },
+    {
+      "id": "rb-websocket-conn",
+      "title": "Runbook: Investigate WebSocket Server Unresponsiveness",
+      "description": "Steps to diagnose why the internal WebSocket server is not accepting connections.",
+      "trigger_alert_ids": [
+        "websocket_server_unresponsive"
+      ],
+      "components": [
+        "Sync WebSocket Server",
+        "Application Core"
+      ],
+      "steps": [
+        {
+          "kind": "inspect",
+          "title": "Review Application Logs",
+          "description": "Check the application logs from the synthetic test for any errors during the startup of the `Sync WebSocket Server` module within the `Application Core`.",
+          "expected_outcome": "Log entry found indicating success or failure of WebSocket server initialization (e.g., 'WebSocket server listening on port XXXX' or 'EADDRINUSE')."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Check for Port Conflicts",
+          "description": "A common failure is another process using the port the WebSocket server is trying to bind to. The logs should contain an 'EADDRINUSE' error if this is the case.",
+          "expected_outcome": "Confirmed whether a port conflict is the root cause."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Verify Client Connection Logic",
+          "description": "Review the `Injected Sync Client` code and the synthetic test's connection logic. Ensure it is attempting to connect to the correct address and port (`ws://localhost:PORT`).",
+          "expected_outcome": "Confirmed the client is configured to connect to the correct server address."
+        },
+        {
+          "kind": "escalate",
+          "title": "Escalate to Development",
+          "description": "If the server seems to start but connections still fail, it could be an issue within the WebSocket library or the application's initialization sequence. Escalate to the development team.",
+          "expected_outcome": "A ticket is created with detailed diagnostic information."
+        }
+      ],
+      "addresses_findings": []
+    },
+    {
+      "id": "rb-browser-orchestration",
+      "title": "Runbook: Investigate Browser Orchestration Failures",
+      "description": "Steps to diagnose failures in launching or controlling browser instances via CDP.",
+      "trigger_alert_ids": [
+        "browser_orchestration_failure"
+      ],
+      "components": [
+        "Browser Orchestrator",
+        "Managed Browser"
+      ],
+      "steps": [
+        {
+          "kind": "inspect",
+          "title": "Analyze Logged Errors",
+          "description": "Filter application logs for 'Browser Orchestrator' or 'CDP' related messages. The error message often contains the specific reason for failure (e.g., 'Target closed', 'Could not find browser revision').",
+          "expected_outcome": "Specific CDP error message is identified."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Verify Browser Installation",
+          "description": "Ensure that the target browser (Chrome/Brave) is installed in the expected location on the test machine and that the application is configured with the correct path.",
+          "expected_outcome": "Confirmed browser is correctly installed and accessible."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Check for Zombie Processes",
+          "description": "Check the test machine for leftover, hung browser processes from previous runs. These can interfere with new instances being launched or prevent ports from being used.",
+          "expected_outcome": "Confirmed no zombie browser processes are running."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Check Remote Debugging Port",
+          "description": "Verify that no firewall or security policy is blocking the remote debugging port (e.g., 9222) on localhost.",
+          "expected_outcome": "Confirmed the debugging port is open and available."
+        }
+      ],
+      "addresses_findings": []
+    },
+    {
+      "id": "rb-ui-load",
+      "title": "Runbook: Investigate Control Panel UI Load Failure",
+      "description": "Steps to diagnose why the main React-based UI is not rendering correctly.",
+      "trigger_alert_ids": [
+        "control_panel_ui_load_failure"
+      ],
+      "components": [
+        "Control Panel UI"
+      ],
+      "steps": [
+        {
+          "kind": "inspect",
+          "title": "Review Synthetic Test Artifacts",
+          "description": "Examine the screenshot and video from the failed synthetic test. This will visually confirm what is (or is not) rendering on the screen.",
+          "expected_outcome": "Visual confirmation of the UI failure (e.g., blank screen, error message displayed)."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Check Renderer Process Logs",
+          "description": "Inspect the Electron renderer process console logs. This is where JavaScript errors from the React application will appear. Look for stack traces or messages like 'Cannot read property of undefined'.",
+          "expected_outcome": "A JavaScript error in the console log is identified as the root cause."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Verify Asset Bundling",
+          "description": "Check the logs for the `build_frontend_assets` CI/CD step. Ensure the build completed without errors and that the resulting JS/CSS bundles were correctly included in the final application package.",
+          "expected_outcome": "Confirmed that the frontend assets were built and packaged successfully."
+        },
+        {
+          "kind": "escalate",
+          "title": "Escalate to Frontend Development",
+          "description": "If the issue is a code-level bug in the React application, escalate to the frontend development team with the console logs and screenshots.",
+          "expected_outcome": "A ticket is created with detailed diagnostic information for the frontend team."
+        }
+      ],
+      "addresses_findings": []
+    },
+    {
+      "id": "rb-runtime-errors",
+      "title": "Runbook: Investigate Runtime Warnings",
+      "description": "Steps to investigate warning-level alerts like high client error rates or excessive sync drift.",
+      "trigger_alert_ids": [
+        "client_error_rate_high",
+        "excessive_stream_sync_drift"
+      ],
+      "components": [
+        "Application Core"
+      ],
+      "steps": [
+        {
+          "kind": "inspect",
+          "title": "Review Backend Dashboard",
+          "description": "Open the 'Backend Core Health' dashboard. Correlate the timing of the alert with other metrics. For `client_error_rate_high`, look at the error type breakdown. For `excessive_stream_sync_drift`, check CPU usage and network latency metrics.",
+          "expected_outcome": "Identified correlation between the alert and other system metrics."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Analyze Error Logs/Metrics",
+          "description": "For high error rates, query the aggregated logs to find the most common error messages and stack traces. For sync drift, analyze the distribution of drift values to see if it affects all users or a subset.",
+          "expected_outcome": "A pattern is identified (e.g., a specific error affects 80% of cases, drift only occurs on Windows)."
+        },
+        {
+          "kind": "diagnose",
+          "title": "Check for Recent Changes",
+          "description": "Correlate the start of the issue with recent application releases or known changes in the external environment (e.g., F1TV website update).",
+          "expected_outcome": "A potential causal change is identified."
+        },
+        {
+          "kind": "escalate",
+          "title": "Create Investigative Ticket",
+          "description": "If the issue is persistent or the cause is not immediately obvious, create a ticket for the development team including all findings, graphs, and log samples.",
+          "expected_outcome": "A well-documented ticket is created for further investigation."
+        }
+      ],
+      "addresses_findings": []
+    }
+  ],
+  "dashboards": [
+    {
+      "id": "dash-overview",
+      "title": "Application Health Overview",
+      "description": "A high-level dashboard showing the overall health of the application, from artifact delivery to synthetic test results.",
+      "target": "global",
+      "key_metrics": [
+        "release_artifact_download.availability",
+        "synthetic_app_launch.success_rate",
+        "synthetic_websocket_connect.success_rate",
+        "synthetic_ui_load.success_rate",
+        "client_errors.rate",
+        "stream_sync_drift.p95"
+      ]
+    },
+    {
+      "id": "dash-backend",
+      "title": "Backend Core Health",
+      "description": "Detailed metrics for the Application Core, Browser Orchestrator, and WebSocket Server.",
+      "target": "Application Core",
+      "key_metrics": [
+        "process.cpu_usage",
+        "process.memory_usage",
+        "websocket.connected_clients",
+        "websocket.messages_out.rate",
+        "cdp.command.latency",
+        "cdp.command.errors.rate",
+        "stream_sync_drift.p95",
+        "stream_sync_drift.max"
+      ]
+    },
+    {
+      "id": "dash-frontend",
+      "title": "Control Panel UI Performance",
+      "description": "Metrics related to the performance and errors of the React-based Control Panel UI.",
+      "target": "Control Panel UI",
+      "key_metrics": [
+        "ui.js_errors.rate",
+        "ui.paint_time.p95",
+        "ui.interaction_latency.p95"
+      ]
+    }
+  ],
+  "on_call": {
+    "cadence": "weekly",
+    "primary": "f1-sync-primary-rotation",
+    "secondary": "f1-sync-secondary-rotation",
+    "notes": "The primary on-call is responsible for acknowledging and investigating all PagerDuty alerts. The secondary is for escalation."
+  },
+  "blockers": []
+}

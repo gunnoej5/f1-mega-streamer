@@ -1,0 +1,51 @@
+{
+  "run_id": "3b7959b3-2657-41bc-a671-12e8cf0e71d7",
+  "project_id": "785bffd3-9e1b-4b82-bdec-771017c8d00f",
+  "generated_at": "2026-06-22T17:47:48.765778+00:00",
+  "gate_approvals": [
+    {
+      "gate": "gate_product_owner",
+      "verdict": "approve",
+      "reviewer": "[redacted]",
+      "at": "2026-06-21T15:42:55.777112+00:00"
+    },
+    {
+      "gate": "gate_architecture_review",
+      "verdict": "approve",
+      "reviewer": "[redacted]",
+      "at": "2026-06-21T15:47:27.384509+00:00"
+    },
+    {
+      "gate": "gate_senior_eng",
+      "verdict": "approve",
+      "reviewer": "[redacted]",
+      "at": "2026-06-21T15:57:24.217095+00:00"
+    },
+    {
+      "gate": "gate_qa_lead",
+      "verdict": "approve",
+      "reviewer": "[redacted]",
+      "at": "2026-06-22T17:47:25.233523+00:00"
+    },
+    {
+      "gate": "gate_on_call",
+      "verdict": "approve",
+      "reviewer": "[redacted]",
+      "at": "2026-06-22T17:47:30.911859+00:00"
+    }
+  ],
+  "agent_versions": {
+    "coding_frontend": "n/a",
+    "coding_backend": "n/a",
+    "coding_infra": "n/a",
+    "code_review": "n/a",
+    "release": "n/a",
+    "sre_monitoring": "n/a"
+  },
+  "file_count": 36,
+  "zones_completed": [
+    "deployment",
+    "implementation",
+    "quality"
+  ]
+}
